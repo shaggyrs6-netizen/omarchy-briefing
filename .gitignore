@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.preview-state/
+.test-state/
+*.bak

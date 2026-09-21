@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "shaggyrs6.briefing",
+  "name": "Omarchy Briefing",
+  "version": "0.1.0",
+  "author": "Lee",
+  "license": "MIT",
+  "description": "Completed package changes and a quiet, source-labelled Omarchy news reader",
+  "kinds": ["bar-widget"],
+  "entryPoints": {"barWidget": "BarWidget.qml"},
+  "barWidget": {"displayName": "Omarchy Briefing", "category": "System", "allowMultiple": false}
+}

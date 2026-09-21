@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Omarchy Briefing · local prototype</title>
+  <link rel="stylesheet" href="/preview.css">
+  <script src="/preview.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><div><p class="eyebrow">YOUR DESKTOP, EXPLAINED</p><h1>Omarchy Briefing<span class="dot">.</span></h1><p class="intro">A little context. Fewer tabs to keep in your head.</p></div><span class="prototype">Local prototype · 0.1</span></header>
+    <nav aria-label="Views"><button id="updates-tab" class="active" aria-pressed="true">Omarchy Updates Explained</button><button id="news-tab" aria-pressed="false">Omarchy News <span id="unread">0</span></button><button id="settings-tab" aria-pressed="false">Settings</button></nav>
+    <p id="error" role="alert" hidden></p>
+    <section id="updates-view"><div class="section-heading"><div><p class="eyebrow">ON THIS COMPUTER</p><h2>Completed changes</h2></div><label>History <select id="date-filter"><option value="latest">Latest day</option><option value="all">Recent transactions</option></select></label></div><p class="hint" id="coverage"></p><div id="updates"></div></section>
+    <section id="news-view" hidden><div class="section-heading"><div><p class="eyebrow">AROUND OMARCHY</p><h2>A quiet catch-up</h2></div><button id="refresh" class="primary">Refresh news</button></div><div class="filters"><label><input type="checkbox" id="official-only"> Official only</label><label><input type="checkbox" id="unread-only"> Unread only</label><button id="read-everything">Mark all read</button><button id="read-all">Mark shown as read</button></div><div id="source-status" class="source-status"></div><div id="news"></div></section>
+    <section id="settings-view" hidden><p class="eyebrow">MAKE YOURSELF COMFORTABLE</p><h2>News settings</h2><div class="settings-card"><label class="setting-label" for="interval">Check for news</label><select id="interval"><option value="0">Manually</option><option value="2">Every 2 hours</option><option value="6">Every 6 hours</option><option value="8">Every 8 hours</option><option value="12">Every 12 hours</option><option value="24">Every 24 hours</option></select><p class="hint">Checks run while this preview is open. The native plugin checks while the desktop shell is running. No wake-ups or catch-up flood after sleep.</p><fieldset><legend>Sources</legend><div id="sources"></div></fieldset><p class="hint">Headlines come directly from these public feeds. Extracts are source text, not AI summaries. Your package history stays on this computer.</p><button id="save" class="primary">Save settings</button><span id="saved" role="status"></span></div><p class="hint">Notifications are off. News refreshes never install software.</p></section>
+    <footer><span>LOCAL HISTORY · PUBLIC FEEDS · NO AI REQUIRED</span><span id="checked">Reading local history…</span></footer>
+  </main>
+</body>
+</html>
