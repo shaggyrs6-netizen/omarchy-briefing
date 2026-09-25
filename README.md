@@ -19,6 +19,12 @@ The image above is promotional artwork, not a screenshot. The actual panel follo
 
 This is an explainer. It does not install, remove, roll back or upgrade software.
 
+### mise-managed tools (0.1.1)
+
+Codex CLI, Node.js and other installed mise tools appear separately from pacman packages. Selected versions in the home configuration are shown first; older installed versions can be expanded in the native panel. Briefing runs `mise ls --installed --json` from the home directory, with a ten-second timeout, and checks that returned installation directories exist. It never runs mise install/update commands or queries available versions.
+
+The first check establishes a baseline. Existing installations are labelled as discovered; no previous-version or installation-time history is guessed. Subsequent differences record newly observed installed versions, selection changes and installations no longer listed, with the interval between observations. Events entirely between checks cannot be recovered. A failure retains the previous snapshot and displays a stale-data warning. Observations are stored locally in `mise.json` and do not depend on the news refresh interval.
+
 ## Omarchy news
 
 - Official Omarchy news and GitHub releases enabled by default.
@@ -34,6 +40,7 @@ Extracts are text from the source, not AI summaries. No API key, AI service or p
 
 - Omarchy 4.x with its Quickshell desktop shell and plugin CLI.
 - Python 3 (standard library only).
+- mise on the desktop shell's PATH for mise-tool observations; package history and news remain available if mise is missing.
 - Read access to `/var/log/pacman.log` for package history.
 - HTTPS access for fetching news. Saved headlines remain readable offline.
 
@@ -79,7 +86,7 @@ Cached headlines, preferences and read status remain in `$XDG_STATE_HOME/omarchy
 
 ## Files, permissions and network access
 
-The plugin reads `/var/log/pacman.log`. It writes only its own state directory: `settings.json`, `news.json`, `read.json` and a lock file. Writes are atomic and serialised. Its Python helper runs without elevated privileges. Installation and bar placement use Omarchy's explicit CLI commands; the plugin itself does not rewrite your shell configuration.
+The plugin reads `/var/log/pacman.log` and installed-tool metadata through mise. It writes only its own state directory: `settings.json`, `news.json`, `read.json`, `mise.json` and a lock file. Writes are atomic and serialised. Its Python helper runs without elevated privileges. Installation and bar placement use Omarchy's explicit CLI commands; the plugin itself does not rewrite your shell configuration.
 
 Enabled news sources are fetched directly over HTTPS:
 
@@ -94,7 +101,7 @@ The optional development HTTP preview is not used by the native plugin. Run `pyt
 
 ## Scope and limitations
 
-- Package history covers the latest 60 transactions in the current pacman log, including AUR packages installed through pacman. It does not import rotated logs, mise tool history, Flatpak changes or shell-plugin updates.
+- Package history covers the latest 60 transactions in the current pacman log, including AUR packages installed through pacman. It does not import rotated logs, pre-existing mise update history, Flatpak changes or shell-plugin updates. mise inventory observations are retained separately, with the latest 200 events saved and 20 displayed.
 - Several pacman transactions may belong to one Omarchy update. The interface groups by date without claiming to know session boundaries.
 - A completed transaction does not prove all subsequent hooks succeeded. A DKMS invocation does not prove its build succeeded.
 - Version-specific release details currently match Omarchy destination tags only. Intermediate releases and packaging changes may be omitted. Other package links are explicitly unmatched, and unavailable release details are stated.

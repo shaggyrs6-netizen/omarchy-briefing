@@ -18,6 +18,8 @@ Panel {
     property bool officialOnly: false
     property bool unreadOnly: false
     property bool showHistory: false
+    property bool showOlderMise: false
+    readonly property var miseData: briefingData.mise || ({installed: [], history: [], error: null})
     property var intervals: [0, 2, 6, 8, 12, 24]
     readonly property color ink: bar ? bar.foreground : Color.foreground
     readonly property color accent: Color.accent
@@ -128,6 +130,31 @@ Panel {
                             visible: root.currentView === "updates"
                             Layout.fillWidth: true
                             Copy { text: root.briefingData.coverage || "Reading local package history…"; font.pixelSize: Style.font.caption }
+                            Copy { text: "Installed tools · mise"; font.bold: true; color: root.accent }
+                            Copy { visible: !!root.miseData.error; text: (root.miseData.error || "") + " Saved observations may be stale."; color: "#e7c889" }
+                            Copy { text: "Checked " + root.date(root.miseData.checkedAt) + ". First seen is when Briefing noticed a version, not its installation time."; font.pixelSize: Style.font.caption }
+                            Action { text: root.showOlderMise ? "Show selected versions" : "Show all installed tool versions"; onClicked: root.showOlderMise = !root.showOlderMise }
+                            Repeater {
+                                model: root.miseData.installed.filter(function(x) { return root.showOlderMise || x.active })
+                                delegate: ColumnLayout {
+                                    id: toolRow
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    Copy { text: toolRow.modelData.title + " · " + toolRow.modelData.version; font.bold: true }
+                                    Copy { text: toolRow.modelData.description }
+                                    Copy { text: (toolRow.modelData.active ? "Selected in home configuration" : "Installed, not selected") + " · " + (toolRow.modelData.baseline ? "Existing installation discovered" : "New installation observed"); color: root.accent; font.pixelSize: Style.font.caption }
+                                    Copy { text: "First seen: " + root.date(toolRow.modelData.firstSeen); font.pixelSize: Style.font.caption }
+                                }
+                            }
+                            Repeater {
+                                model: root.miseData.history.slice(0, 20)
+                                delegate: Copy {
+                                    required property var modelData
+                                    text: modelData.title + " " + modelData.version + " · " + modelData.event + "\nObserved between " + root.date(modelData.since) + " and " + root.date(modelData.at)
+                                    font.pixelSize: Style.font.caption
+                                }
+                            }
+                            Copy { text: "Package transactions"; font.bold: true; color: root.accent }
                             Copy { visible: !!root.briefingData.logError; text: root.briefingData.logError || ""; color: "#e7c889" }
                             Action { text: root.showHistory ? "Show latest day" : "Show recent history"; onClicked: root.showHistory = !root.showHistory }
                             Copy { visible: root.briefingData.transactions.length === 0; text: "No recorded package changes found." }

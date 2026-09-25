@@ -20,6 +20,8 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shutil
+import subprocess
 import tempfile
 import urllib.error
 import urllib.parse
@@ -289,6 +291,89 @@ def parse_log(text):
     return [tx for tx in reversed(transactions) if tx["changes"] or tx["rebuilds"]]
 
 
+def mise_inventory():
+    """Ask mise for installed versions only, outside the caller's project."""
+    executable = shutil.which("mise")
+    if not executable:
+        raise ValueError("mise is not available on the desktop's PATH")
+    result = subprocess.run([executable, "ls", "--installed", "--json"],
+                            cwd=Path.home(), capture_output=True, text=True, timeout=10,
+                            env=dict(os.environ, MISE_COLOR="0"))
+    if result.returncode:
+        raise ValueError("mise could not list installed tools; saved observations retained")
+    payload = json.loads(result.stdout)
+    if not isinstance(payload, dict):
+        raise ValueError("Unexpected mise inventory format")
+    rows = {}
+    descriptions = {
+        "codex": ("Codex CLI", "OpenAI’s coding agent for the terminal."),
+        "node": ("Node.js", "Runs JavaScript tools and applications outside the browser."),
+        "gh": ("GitHub CLI", "Works with GitHub repositories and issues from the terminal."),
+        "python": ("Python", "Runs Python programs and development tools."),
+    }
+    for tool, versions in payload.items():
+        if not isinstance(versions, list):
+            raise ValueError("Unexpected mise version list")
+        for item in versions:
+            if not isinstance(item, dict):
+                raise ValueError("Unexpected mise version record")
+            # Configured or merely available versions must never become install events.
+            if item.get("installed") is not True:
+                continue
+            version, path = item.get("version"), item.get("install_path")
+            if not isinstance(version, str) or not isinstance(path, str) or not Path(path).is_dir():
+                raise ValueError("mise listed an installation whose directory is unavailable; retrying later")
+            title, description = descriptions.get(tool, (tool, "A development tool managed by mise."))
+            key = json.dumps([tool, version, path])
+            rows[key] = {"tool": tool, "version": version, "path": path,
+                         "active": item.get("active") is True, "title": title,
+                         "description": description}
+    return rows
+
+
+def observe_mise(previous, rows, at):
+    """Track observed inventory differences, never reconstruct guessed upgrades."""
+    baseline = previous is None
+    old = previous["installed"] if previous else {}
+    history = list(previous["history"]) if previous else []
+    for key, row in rows.items():
+        row["firstSeen"] = old.get(key, {}).get("firstSeen", at)
+        row["baseline"] = old.get(key, {}).get("baseline", baseline)
+        if not baseline and key not in old:
+            history.append({"at": at, "title": row["title"], "version": row["version"],
+                            "event": "New installed version observed", "since": previous["checkedAt"]})
+        elif key in old and row["active"] != old[key]["active"]:
+            history.append({"at": at, "title": row["title"], "version": row["version"],
+                            "event": "Selected version changed" if row["active"] else "No longer selected",
+                            "since": previous["checkedAt"]})
+    for key in old.keys() - rows.keys():
+        history.append({"at": at, "title": old[key]["title"], "version": old[key]["version"],
+                        "event": "Installation no longer listed", "since": previous["checkedAt"]})
+    return {"schemaVersion": 1, "checkedAt": at, "installed": rows, "history": history[-200:]}
+
+
+def mise_status(directory):
+    path = directory / "mise.json"
+    saved = None
+    try:
+        with locked(directory):
+            saved = read_json(path, None)
+            if saved is not None and (not isinstance(saved, dict) or saved.get("schemaVersion") != 1
+                                     or not isinstance(saved.get("installed"), dict)
+                                     or not isinstance(saved.get("history"), list)
+                                     or not timestamp(saved.get("checkedAt"))):
+                raise ValueError("Invalid mise observation file; original preserved")
+            saved = observe_mise(saved, mise_inventory(), now())
+            write_json(path, saved)
+        error = None
+    except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired) as problem:
+        error = f"mise tools: {problem}"
+    valid = isinstance(saved, dict) and isinstance(saved.get("installed"), dict) and isinstance(saved.get("history"), list)
+    return {"installed": sorted(saved["installed"].values(), key=lambda x: (not x["active"], x["tool"], x["version"])) if valid else [],
+            "history": list(reversed(saved["history"])) if valid else [],
+            "checkedAt": saved.get("checkedAt") if valid else None, "error": error}
+
+
 def status(directory, log_path):
     news_errors = []
     try:
@@ -331,12 +416,12 @@ def status(directory, log_path):
                     entry["releaseNote"] = "Release announcement for " + tag + ": " + note["excerpt"]
                     entry["releaseUrl"] = note["url"]
                     entry["releaseScope"] = "Destination release only; intermediate releases and packaging changes may be omitted."
-    return {"generatedAt": now(), "settings": settings, "sources": [dict(value, id=key, enabled=key in settings["enabledSources"],
+    return {"generatedAt": now(), "mise": mise_status(directory), "settings": settings, "sources": [dict(value, id=key, enabled=key in settings["enabledSources"],
             lastSuccess=cache.get(key, {}).get("lastSuccess"), lastAttempt=cache.get(key, {}).get("lastAttempt"),
             error=cache.get(key, {}).get("error")) for key, value in SOURCES.items()],
             "news": items, "newsError": " ".join(news_errors), "unread": sum(not item["read"] for item in items),
             "transactions": transactions, "logError": log_error, "logPath": str(log_path),
-            "coverage": "Pacman package transactions, including AUR packages installed through pacman. mise tools, Flatpak and shell-plugin history are not covered. Each transaction is shown separately; one Omarchy update can contain several."}
+            "coverage": "Package history covers pacman and AUR transactions. Installed mise tools and observed changes are shown separately below. Flatpak and shell-plugin updates are not covered."}
 
 
 def action(directory, log_path, payload):

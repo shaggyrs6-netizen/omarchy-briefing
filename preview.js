@@ -31,6 +31,17 @@ async function request(payload) {
 function renderUpdates() {
   const container = $("updates"); container.replaceChildren();
   $("coverage").textContent = state.coverage;
+  const mise = state.mise || {installed:[], history:[]};
+  container.append(node("h3", "Installed tools · mise"));
+  if (mise.error) container.append(node("p", mise.error + " Saved observations may be stale.", "warning"));
+  container.append(node("p", "Checked " + date(mise.checkedAt) + ". First seen is when Briefing noticed a version, not its installation time.", "hint"));
+  for (const item of mise.installed.filter(x => x.active)) {
+    const card = node("article", undefined, "card");
+    card.append(node("h3", item.title), node("p", item.version, "version"), node("p", item.description, "description"), node("p", "Selected in home configuration · " + (item.baseline ? "Existing installation discovered" : "New installation observed") + " · first seen " + date(item.firstSeen), "hint"));
+    container.append(card);
+  }
+  for (const item of mise.history.slice(0,20)) container.append(node("p", `${item.title} ${item.version} · ${item.event} · observed between ${date(item.since)} and ${date(item.at)}`, "hint"));
+  container.append(node("h3", "Package transactions"));
   if (state.logError) container.append(node("p", state.logError, "warning"));
   const latest = state.transactions[0]?.started.slice(0,10);
   const txs = state.transactions.filter(tx => $("date-filter").value === "all" || tx.started.slice(0,10) === latest);

@@ -85,6 +85,9 @@ class FeedTests(unittest.TestCase):
 
 class StateTests(unittest.TestCase):
     def setUp(self):
+        inventory_patch = patch("briefing.mise_inventory", return_value={})
+        inventory_patch.start()
+        self.addCleanup(inventory_patch.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.directory = Path(self.temp.name)
@@ -144,6 +147,66 @@ class StateTests(unittest.TestCase):
         report = b.status(self.directory, self.directory / "missing.log")
         self.assertEqual(len(report["news"]), 1)
         self.assertTrue(report["logError"])
+
+
+class MiseTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.directory = Path(self.temp.name)
+
+    def rows(self, version="0.157.0", active=True):
+        return {version: {"tool":"codex", "version":version, "path":str(self.directory),
+                          "active":active, "title":"Codex CLI", "description":"Terminal agent"}}
+
+    def test_baseline_does_not_invent_upgrade_and_repeat_does_not_duplicate(self):
+        first = b.observe_mise(None, self.rows(), "2026-09-25T08:00:00+00:00")
+        self.assertEqual(first["history"], [])
+        self.assertTrue(first["installed"]["0.157.0"]["baseline"])
+        second = b.observe_mise(first, self.rows(), "2026-09-25T09:00:00+00:00")
+        self.assertEqual(second["history"], [])
+        self.assertEqual(second["installed"]["0.157.0"]["firstSeen"], first["checkedAt"])
+
+    def test_new_install_records_observation_window(self):
+        first = b.observe_mise(None, self.rows(), "2026-09-25T08:00:00+00:00")
+        rows = self.rows(active=False) | self.rows("0.158.0")
+        second = b.observe_mise(first, rows, "2026-09-25T09:00:00+00:00")
+        new = next(x for x in second["history"] if x["version"] == "0.158.0")
+        self.assertEqual(new["event"], "New installed version observed")
+        self.assertEqual(new["since"], first["checkedAt"])
+        self.assertNotIn("oldVersion", new)
+
+    def test_switch_to_existing_version_is_not_new_install(self):
+        first = b.observe_mise(None, self.rows(active=False), "2026-09-25T08:00:00+00:00")
+        second = b.observe_mise(first, self.rows(), "2026-09-25T09:00:00+00:00")
+        self.assertEqual(second["history"][0]["event"], "Selected version changed")
+
+    def test_uninstalled_available_version_is_excluded(self):
+        payload = {"codex":[{"version":"0.157.0", "installed":True, "active":True, "install_path":str(self.directory)},
+                            {"version":"99.0", "installed":False, "active":True}]}
+        from types import SimpleNamespace
+        with patch("briefing.shutil.which", return_value="/usr/bin/mise"), patch("briefing.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=json.dumps(payload))) as run:
+            rows = b.mise_inventory()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(next(iter(rows.values()))["version"], "0.157.0")
+        self.assertEqual(run.call_args.args[0], ["/usr/bin/mise", "ls", "--installed", "--json"])
+
+    def test_failure_keeps_history_and_snapshot(self):
+        with patch("briefing.mise_inventory", return_value=self.rows()):
+            b.mise_status(self.directory)
+        before = (self.directory / "mise.json").read_bytes()
+        with patch("briefing.mise_inventory", side_effect=ValueError("unavailable")):
+            result = b.mise_status(self.directory)
+        self.assertTrue(result["error"])
+        self.assertEqual(len(result["installed"]), 1)
+        self.assertEqual(before, (self.directory / "mise.json").read_bytes())
+
+    def test_corruption_preserved(self):
+        path = self.directory / "mise.json"
+        path.write_text("broken")
+        report = b.mise_status(self.directory)
+        self.assertTrue(report["error"])
+        self.assertEqual(path.read_text(), "broken")
 
 
 if __name__ == "__main__":

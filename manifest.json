@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "shaggyrs6.briefing",
   "name": "Omarchy Briefing",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Lee",
   "license": "MIT",
   "description": "Completed package changes and a quiet, source-labelled Omarchy news reader",
