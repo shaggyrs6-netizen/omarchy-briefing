@@ -89,4 +89,3 @@ All 31 tests pass, including 8 GiB sparse-log fixtures, a dense-tail allocation
 regression test, incomplete transactions, and oversized lines. The fix and
 tests are committed and the marketplace verification request has been updated
 to the corrected commit. Thank you for catching it before approval.
-
