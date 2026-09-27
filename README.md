@@ -10,6 +10,11 @@ The image above is promotional artwork, not a screenshot. The actual panel follo
 
 ## Updates explained
 
+Package history reads at most the newest 1 MiB of the log and returns up to 60
+transactions. Older/boundary-cut records may be omitted, with a visible warning;
+evidence then uses window-relative line labels. Abnormally long retained lines
+produce a visible error without hiding news. See [the v0.1.2 fix report](FIX-v0.1.2.md).
+
 - Shows recorded package transactions with exact old and new versions.
 - Gives plain-English descriptions for a small selection of common packages. Unknown packages are labelled honestly.
 - Separates installs, upgrades, downgrades, reinstalls and packaging revisions.

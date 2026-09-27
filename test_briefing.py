@@ -1,6 +1,8 @@
 import json
+import os
 from pathlib import Path
 import tempfile
+import tracemalloc
 import unittest
 from unittest.mock import patch
 import urllib.error
@@ -50,6 +52,87 @@ class EvidenceTests(unittest.TestCase):
         self.assertIsNone(changes[0]["newVersion"])
         self.assertEqual(changes[1]["oldVersion"], changes[1]["newVersion"])
         self.assertEqual(changes[2]["newVersion"], "2.0-1")
+
+
+class BoundedLogTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "pacman.log"
+
+    def test_small_log_keeps_evidence_and_rebuilds(self):
+        self.path.write_text(LOG)
+        rows, warning = b.read_package_history(self.path)
+        self.assertEqual(rows, b.parse_log(LOG))
+        self.assertIsNone(warning)
+
+    def test_sparse_eight_gib_log_reads_only_one_mib(self):
+        with self.path.open("wb") as stream:
+            stream.seek(8 * 1024**3)
+            stream.write(b"\n" + LOG.encode())
+        with patch("briefing.os.pread", wraps=os.pread) as read:
+            rows, warning = b.read_package_history(self.path)
+        self.assertEqual(read.call_count, 1)
+        self.assertEqual(read.call_args.args[1], b.MAX_LOG_BYTES)
+        self.assertEqual(len(rows), 3)
+        self.assertIn("newest 1 MiB", warning)
+        self.assertTrue(rows[0]["changes"][0]["line"].startswith("window line "))
+
+    def test_boundary_cut_transaction_is_not_reported_complete(self):
+        self.path.write_bytes(b"[old] [ALPM] transaction started\n" + b"x" * b.MAX_LOG_BYTES + b"\n[old] [ALPM] installed missing-start (1)\n[old] [ALPM] transaction completed\n" + LOG.encode())
+        rows, _ = b.read_package_history(self.path)
+        self.assertEqual(len(rows), 3)
+        self.assertNotIn("missing-start", str(rows))
+
+    def test_unfinished_completion_line_does_not_complete_transaction(self):
+        self.path.write_text("[now] [ALPM] transaction started\n[now] [ALPM] installed foo (1)\n[now] [ALPM] transaction completed")
+        rows, warning = b.read_package_history(self.path)
+        self.assertEqual(rows[0]["status"], "Incomplete record")
+        self.assertIn("unfinished", warning)
+
+    def test_oversized_line_fails_closed(self):
+        self.path.write_bytes(LOG.encode() + b"x" * (b.MAX_LOG_LINE_BYTES + 1) + b"\n")
+        with self.assertRaisesRegex(ValueError, "16 KiB"):
+            b.read_package_history(self.path)
+
+    def test_newline_free_huge_tail_has_no_transactions(self):
+        with self.path.open("wb") as stream:
+            stream.seek(8 * 1024**3)
+            stream.write(b"x")
+        rows, warning = b.read_package_history(self.path)
+        self.assertEqual(rows, [])
+        self.assertIn("limited", warning)
+
+    def test_only_latest_sixty_transactions(self):
+        self.path.write_text(LOG * 100)
+        rows, _ = b.read_package_history(self.path)
+        self.assertEqual(len(rows), 60)
+
+    def test_fifo_rejected_without_waiting_for_writer(self):
+        os.mkfifo(self.path)
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            b.read_package_history(self.path)
+
+    def test_dense_tail_in_large_file_has_bounded_allocations(self):
+        tail = (LOG.encode() * (b.MAX_LOG_BYTES // len(LOG.encode()) + 1))[-b.MAX_LOG_BYTES:]
+        with self.path.open("wb") as stream:
+            stream.seek(8 * 1024**3)
+            stream.write(tail)
+        tracemalloc.start()
+        try:
+            rows, warning = b.read_package_history(self.path)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertEqual(len(rows), 60)
+        self.assertIsNotNone(warning)
+        self.assertLess(peak, 64 * 1024**2)
+
+    def test_empty_and_invalid_utf8(self):
+        self.path.write_bytes(b"")
+        self.assertEqual(b.read_package_history(self.path), ([], None))
+        self.path.write_bytes(b"\xff\n" + LOG.encode())
+        self.assertEqual(len(b.read_package_history(self.path)[0]), 3)
 
 
 class FeedTests(unittest.TestCase):
@@ -102,6 +185,16 @@ class StateTests(unittest.TestCase):
         self.assertEqual(b.status(self.directory, self.log)["unread"], 0)
         with self.assertRaises(ValueError):
             b.action(self.directory, self.log, {"action": "settings", "settings": {"intervalHours": 1, "enabledSources": []}})
+
+    def test_oversized_log_line_does_not_hide_news_or_mise(self):
+        item = b.parse_feed(RSS, "official")[0]
+        b.write_json(self.directory / "news.json", {"official": {"items": [item]}})
+        self.log.write_text("x" * (b.MAX_LOG_LINE_BYTES + 1) + "\n")
+        report = b.status(self.directory, self.log)
+        self.assertEqual(report["transactions"], [])
+        self.assertIn("16 KiB", report["logError"])
+        self.assertEqual(report["unread"], 1)
+        self.assertIsNone(report["mise"]["error"])
 
     def test_manual_and_recent_checks_do_not_fetch(self):
         with patch("briefing.fetch_source") as fetch:

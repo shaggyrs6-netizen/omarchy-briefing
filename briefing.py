@@ -21,6 +21,7 @@ from pathlib import Path
 import re
 import secrets
 import shutil
+import stat
 import subprocess
 import tempfile
 import urllib.error
@@ -247,6 +248,45 @@ def package_info(name):
             "category": "Other package", "sourceUrl": "", "descriptionKind": "Unknown package"}
 
 
+MAX_LOG_BYTES = 1024 * 1024
+MAX_LOG_LINE_BYTES = 16 * 1024
+
+
+def read_package_history(path):
+    """Parse a bounded regular-file snapshot; never read the historical prefix."""
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("Package history must be a regular file")
+        offset = max(0, info.st_size - MAX_LOG_BYTES)
+        # pread has an explicit ceiling even if the file grows after fstat.
+        data = os.pread(fd, min(info.st_size, MAX_LOG_BYTES), offset)
+    finally:
+        os.close(fd)
+    warnings = []
+    if offset:
+        warnings.append("Package history limited to the newest 1 MiB; older or boundary-cut transactions are omitted. Evidence line numbers are relative to this retained window, not the full log.")
+        # Always discard the first line, including when the window happens to
+        # start at a line boundary: conservative omission beats false evidence.
+        boundary = data.find(b"\n")
+        data = data[boundary + 1:] if boundary >= 0 else b""
+    if data and not data.endswith(b"\n"):
+        data = data[:data.rfind(b"\n") + 1]
+        warnings.append("An unfinished final log line was omitted.")
+    # A bounded window also bounds split/parse allocations and record count.
+    # Refuse abnormal lines rather than silently dropping evidence mid-transaction.
+    if any(len(line) > MAX_LOG_LINE_BYTES for line in data.split(b"\n")):
+        raise ValueError("Package history withheld: a log line exceeds the 16 KiB safety limit")
+    transactions = parse_log(data.decode("utf-8", errors="replace"))[:60]
+    if offset:
+        for tx in transactions:
+            tx["id"] = f"window-{offset}:" + tx["id"]
+            for entry in tx["changes"] + tx["rebuilds"]:
+                entry["line"] = f"window line {entry['line']}"
+    return transactions, " ".join(warnings) or None
+
+
 def parse_log(text):
     transactions, pending, current = [], None, None
     for number, line in enumerate(text.splitlines(), 1):
@@ -402,9 +442,9 @@ def status(directory, log_path):
     items.sort(key=lambda x: x["published"] or "", reverse=True)
     log_error = None
     try:
-        transactions = parse_log(log_path.read_text(errors="replace"))[:60]
-    except OSError as error:
-        transactions, log_error = [], f"Cannot read package history: {error.strerror}"
+        transactions, log_error = read_package_history(log_path)
+    except (OSError, ValueError) as error:
+        transactions, log_error = [], f"Cannot read package history: {error}"
     # Match exact Omarchy release tags only, never latest-release notes for an older update.
     releases = cache.get("releases", {}).get("items", [])
     for tx in transactions:
