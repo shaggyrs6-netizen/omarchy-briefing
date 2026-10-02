@@ -39,6 +39,8 @@ SOURCES = {
 INTERVALS = (0, 2, 6, 8, 12, 24)
 DEFAULTS = {"intervalHours": 0, "enabledSources": ["official", "releases"]}
 PACKAGES = {
+    "chatgpt-bin": ("ChatGPT desktop", "OpenAI’s desktop app for working with ChatGPT.", "Application", "https://developers.openai.com/codex/app"),
+    "antigravity": ("Google Antigravity", "Google’s app for working with AI agents across your projects.", "Application", "https://antigravity.google/product/antigravity-2"),
     "omarchy": ("Omarchy", "The desktop tools and defaults that make this an Omarchy computer.", "Desktop", "https://github.com/omacom/omarchy/releases"),
     "omarchy-settings": ("Omarchy settings", "Shared system settings supplied with Omarchy.", "Desktop", "https://github.com/omacom/omarchy/releases"),
     "linux-omarchy": ("Omarchy kernel", "The core of Linux: it connects software to your computer’s hardware.", "System", "https://github.com/omacom/omarchy/releases"),

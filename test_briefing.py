@@ -26,6 +26,25 @@ ATOM = b'''<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>42</id><title>v4
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_new_desktop_package_names_preserve_version_evidence(self):
+        for package, title in (("chatgpt-bin", "ChatGPT desktop"), ("antigravity", "Google Antigravity")):
+            with self.subTest(package=package):
+                text = ("[2026-10-02T02:10:00-0500] [ALPM] transaction started\n"
+                        f"[2026-10-02T02:10:01-0500] [ALPM] upgraded {package} (1.0-1 -> 2.0-1)\n"
+                        "[2026-10-02T02:10:02-0500] [ALPM] transaction completed\n")
+                change = b.parse_log(text)[0]["changes"][0]
+                self.assertEqual(change["title"], title)
+                self.assertEqual(change["package"], package)
+                self.assertEqual((change["oldVersion"], change["newVersion"]), ("1.0-1", "2.0-1"))
+                self.assertEqual(change["descriptionKind"], "Plain-English description")
+                self.assertTrue(change["sourceUrl"].startswith("https://"))
+                self.assertEqual(change["releaseNote"], "Version-specific release details unavailable.")
+
+    def test_unknown_package_still_uses_honest_fallback(self):
+        info = b.package_info("unrecognised-test-package")
+        self.assertEqual(info["title"], "unrecognised-test-package")
+        self.assertEqual(info["descriptionKind"], "Unknown package")
+
     def test_installs_rebuilds_and_available_are_different(self):
         txs = b.parse_log(LOG)
         changes = [x for tx in txs for x in tx["changes"]]
