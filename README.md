@@ -1,10 +1,16 @@
 # Omarchy Briefing
 
-**Updates explained. News in one place.**
+**Understand your updates. Follow Omarchy news. Remember what you changed and why.**
 
 ![Omarchy Briefing promotional thumbnail](preview.png)
 
-A small Omarchy bar plugin for understanding completed package updates and catching up with Omarchy news. Click the newspaper icon to open it. A dot indicates unread news; hover to see the count.
+A single Omarchy bar plugin with three sections:
+
+- **Omarchy Updates Explained** — recorded package changes, exact versions, plain-English descriptions for supported packages, and separate observations of installed mise tools.
+- **Omarchy News** — official announcements and optional community feeds, with configurable refresh intervals and read/unread tracking.
+- **My Linux changes** — automatic detection of installed package and plugin changes, plus a private journal of why you made a change, where the backup is and how to undo it.
+
+Click the newspaper icon to open it. A dot indicates unread news, not pending journal entries. All sections share the same fonts and theme styling. This tool explains and records changes; it does not install, remove or roll back software, and it never guesses your reasons.
 
 The image above is promotional artwork, not a screenshot. The actual panel follows your Omarchy theme.
 
@@ -42,6 +48,10 @@ The first check establishes a baseline. Existing installations are labelled as d
 Extracts are text from the source, not AI summaries. No API key, AI service or paid subscription is required. Notifications are off; this version does not send desktop notifications.
 
 ## Requirements
+
+See [journal details](LINUX-CHANGES.md) for limits and the optional recording CLI.
+
+- pacman for installed-package detection and Git for Git-managed plugin revisions.
 
 - Omarchy 4.x with its Quickshell desktop shell and plugin CLI.
 - Python 3 (standard library only).
@@ -89,9 +99,19 @@ omarchy plugin remove shaggyrs6.briefing
 
 Cached headlines, preferences and read status remain in `$XDG_STATE_HOME/omarchy-briefing` (normally `~/.local/state/omarchy-briefing`). You may remove that specific directory separately if you want to discard those records. Uninstallation does not restore an old whole-shell configuration over later changes.
 
+## My Linux changes — new in 0.2.0
+
+**Needs context** detects additions, removals and version changes in installed pacman/AUR packages and user Omarchy plugins. Git-managed plugins also track their checked-out commit. Checks run every five minutes while the shell runs, except while a journal draft is open. The first scan establishes a baseline; it does not reconstruct past changes. Observation times are not exact installation times.
+
+**Saved** keeps your explanations: what changed, why, its status, backup location, undo instructions and supporting evidence. Add records manually, explain a detected item, or choose **Add why / notes** beside a package update to start a draft from its version details and log evidence. Reasons are always entered deliberately. Undo instructions are saved text, never executed.
+
+Settings edits, loose AppImages, Flatpak and mise changes are not automatically detected by the journal. Briefing's separate mise section still shows installed-tool observations.
+
+Records remain in `$XDG_STATE_HOME/my-linux-changes/` (normally `~/.local/state/my-linux-changes/`). Existing standalone users keep their records without a migration. After testing Briefing, disable the old widget to keep one bar icon; its files and records need not be removed. See [integration notes](INTEGRATION-0.2.0.md).
+
 ## Files, permissions and network access
 
-The plugin reads `/var/log/pacman.log` and installed-tool metadata through mise. It writes only its own state directory: `settings.json`, `news.json`, `read.json`, `mise.json` and a lock file. Writes are atomic and serialised. Its Python helper runs without elevated privileges. Installation and bar placement use Omarchy's explicit CLI commands; the plugin itself does not rewrite your shell configuration.
+The plugin reads `/var/log/pacman.log`, installed-tool metadata through mise, the installed package list through `pacman -Q`, and user plugin manifests/Git HEAD revisions. It writes to two local state directories: `omarchy-briefing/` holds settings, news, read status and mise observations; `my-linux-changes/` holds the manual journal, one previous journal backup, detection snapshots/events and a lock file. Writes are atomic and serialised. Both directories remain after uninstalling the plugin. Its Python helpers run without elevated privileges. Installation and bar placement use Omarchy's explicit CLI commands; the plugin itself does not rewrite your shell configuration.
 
 Enabled news sources are fetched directly over HTTPS:
 
@@ -106,6 +126,8 @@ The optional development HTTP preview is not used by the native plugin. Run `pyt
 
 ## Scope and limitations
 
+The browser preview covers updates/news only; the combined journal is in the native shell panel.
+
 - Package history covers the latest 60 transactions in the current pacman log, including AUR packages installed through pacman. It does not import rotated logs, pre-existing mise update history, Flatpak changes or shell-plugin updates. mise inventory observations are retained separately, with the latest 200 events saved and 20 displayed.
 - Several pacman transactions may belong to one Omarchy update. The interface groups by date without claiming to know session boundaries.
 - A completed transaction does not prove all subsequent hooks succeeded. A DKMS invocation does not prove its build succeeded.
@@ -114,9 +136,11 @@ The optional development HTTP preview is not used by the native plugin. Run `pyt
 - At most 200 headlines are retained per source. Exact URL duplicates share read status; separate posts about the same story are not merged by meaning.
 - News-source availability and rate limits are outside the plugin's control. Failures retain the previous cache.
 
-The author reported five days of personal use without issues before preparing this release. That is practical experience on one installation, not a claim of compatibility with every system.
+The original update/news build had five days of reported personal use before its first release. The new combined journal has automated and native-component checks but has not had that same extended testing period.
 
 ## Development checks
+
+51 tests cover the combined build, including shared-journal compatibility and consistent text/button components.
 
 ```sh
 python3 -m unittest -v

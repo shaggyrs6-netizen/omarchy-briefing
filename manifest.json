@@ -2,10 +2,9 @@
   "schemaVersion": 1,
   "id": "shaggyrs6.briefing",
   "name": "Omarchy Briefing",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "author": "Lee",
-  "license": "MIT",
-  "description": "Completed package changes and a quiet, source-labelled Omarchy news reader",
+  "description": "Package updates explained, Omarchy news, and a private journal of what changed, why, backups and undo notes",
   "kinds": ["bar-widget"],
   "entryPoints": {"barWidget": "BarWidget.qml"},
   "barWidget": {"displayName": "Omarchy Briefing", "category": "System", "allowMultiple": false}

@@ -30,7 +30,11 @@ Panel {
     readonly property var visibleTransactions: briefingData.transactions.filter(function(tx) {
         return root.showHistory || tx.started.substring(0, 10) === root.briefingData.transactions[0].started.substring(0, 10)
     })
-    function open() { run(["status"]); root.controller.show() }
+    function open() { run(["status"]); if (currentView === "changes") changesView.refresh(); root.controller.show() }
+    function explain(change, completed) {
+        currentView = "changes"
+        changesView.explain(change, completed)
+    }
     function close() { root.controller.hide() }
     function run(args) {
         if (worker.running) return
@@ -66,32 +70,13 @@ Panel {
         running: true
         onTriggered: if (!worker.running) root.run(["refresh", "--due"])
     }
-    component Copy: Text {
-        color: root.ink
-        font.pixelSize: Style.font.body
-        font.family: Style.font.family
-        wrapMode: Text.WordWrap
-        textFormat: Text.PlainText
-        Layout.fillWidth: true
-    }
-    component Action: Controls.Button {
-        id: control
-        enabled: !worker.running
-        implicitHeight: Style.space(42)
-        contentItem: Text {
-            text: control.text
-            color: root.ink
-            font.family: Style.font.family
-            font.pixelSize: Style.font.body
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-        background: Rectangle {
-            radius: Style.space(6)
-            color: control.down ? Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.18) : "transparent"
-            border.width: control.activeFocus ? 2 : 1
-            border.color: control.activeFocus ? root.accent : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.3)
-        }
+    component Copy: BriefingText { ink: root.ink }
+    component Action: BriefingButton { ink: root.ink; accent: root.accent; enabled: !worker.running }
+    IpcHandler {
+        target: "briefing"
+        function changes(): void { root.currentView = "changes"; root.open() }
+        function updates(): void { root.currentView = "updates"; root.open() }
+        function hide(): void { root.close() }
     }
     KeyboardPanel {
         id: popup
@@ -117,8 +102,13 @@ Panel {
                     Action { text: "Settings"; onClicked: root.currentView = "settings" }
                 }
                 Copy { visible: root.errorMessage !== ""; text: root.errorMessage; color: "#e7c889" }
+                RowLayout {
+                    Action { text: "My Linux changes"; onClicked: root.currentView = "changes" }
+                    Copy { text: changesView.journal.pending.length + " need context"; font.pixelSize: Style.font.caption }
+                }
                 Copy { visible: worker.running; text: "Checking… saved content remains below." }
                 Controls.ScrollView {
+                    visible: root.currentView !== "changes"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
@@ -178,6 +168,7 @@ Panel {
                                             Copy { text: (change.modelData.oldVersion && change.modelData.newVersion && change.modelData.oldVersion !== change.modelData.newVersion ? change.modelData.oldVersion + " → " : "") + (change.modelData.newVersion || change.modelData.oldVersion); color: root.accent }
                                             Copy { text: change.modelData.changeKind; font.pixelSize: Style.font.caption }
                                             Action { text: change.expanded ? "Hide details" : "Changes & evidence"; onClicked: change.expanded = !change.expanded }
+                                            Action { text: "Add why / notes"; onClicked: root.explain(change.modelData, !!transaction.modelData.completed) }
                                             ColumnLayout {
                                                 visible: change.expanded
                                                 Layout.fillWidth: true
@@ -242,6 +233,8 @@ Panel {
                             Layout.fillWidth: true
                             Copy { text: "Check for news"; font.bold: true }
                             Controls.ComboBox {
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.body
                                 Layout.fillWidth: true
                                 enabled: !worker.running
                                 model: ["Manually", "Every 2 hours", "Every 6 hours", "Every 8 hours", "Every 12 hours", "Every 24 hours"]
@@ -262,6 +255,15 @@ Panel {
                             Copy { text: "Source extracts, not AI summaries. Package history stays local. Notifications are off. Refreshing news never installs software." }
                         }
                     }
+                }
+                ChangesView {
+                    id: changesView
+                    visible: root.currentView === "changes"
+                    active: visible && root.opened
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    ink: root.ink
+                    accent: root.accent
                 }
             }
         }
